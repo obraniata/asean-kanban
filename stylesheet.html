@@ -738,4 +738,26 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
   .btn, .zone { transition: none; }
   .spinner { animation-duration: 2s; }
 }
+
+/* ---------- Levels ---------- */
+.levelbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0; }
+.lvbtn {
+  appearance: none; -webkit-appearance: none; min-height: 42px; padding: 6px 12px; border-radius: 12px;
+  border: 2px solid var(--line); background: #ffffff; color: var(--ink); -webkit-text-fill-color: var(--ink);
+  font-family: inherit; font-weight: 800; font-size: .9rem; cursor: pointer;
+}
+.lvbtn.done { background: var(--good-bg); border-color: var(--good); color: var(--good-ink); -webkit-text-fill-color: var(--good-ink); }
+.lvbtn.current { background: var(--lagoon); border-color: var(--lagoon-dark); color: #ffffff; -webkit-text-fill-color: #ffffff; }
+.lvbtn.locked { opacity: .55; cursor: not-allowed; }
+.lvtotal {
+  margin-left: auto; font-weight: 800; background: var(--gold-pale); border: 2px solid var(--gold);
+  border-radius: 999px; padding: 6px 14px; color: var(--ink); -webkit-text-fill-color: var(--ink);
+}
+.zlabel {
+  position: absolute; transform: translate(-50%, 26px); background: var(--ink); color: #ffffff;
+  -webkit-text-fill-color: #ffffff; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 999px;
+  white-space: nowrap; pointer-events: none; z-index: 3;
+}
+.flagimg { height: 22px; width: auto; display: block; border: 1px solid rgba(0, 0, 0, .25); pointer-events: none; }
+.country .flagimg { height: 34px; }
 </style>

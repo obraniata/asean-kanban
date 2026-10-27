@@ -19,6 +19,22 @@
   var NAMES = ['Myanmar', 'Thailand', 'Laos', 'Vietnam', 'Cambodia', 'Malaysia',
                'Singapore', 'Brunei', 'Indonesia', 'Philippines', 'Timor-Leste'];
 
+  var FLAGCODE = { 'Myanmar': 'mm', 'Thailand': 'th', 'Laos': 'la', 'Vietnam': 'vn', 'Cambodia': 'kh',
+    'Malaysia': 'my', 'Singapore': 'sg', 'Brunei': 'bn', 'Indonesia': 'id', 'Philippines': 'ph', 'Timor-Leste': 'tl' };
+
+  // 5 levels x 11 circles = 55 points. Only the choices live here; the answers are on the server.
+  var LV = [
+    { name: 'Countries', title: 'Country name bank', items: NAMES,
+      hint: 'Drag a name to a circle, or tap a name and then tap a circle.' },
+    { name: 'Capitals', title: 'Capital city bank', hint: 'Each circle now shows its country. Match its capital city.',
+      items: ['Naypyidaw', 'Bangkok', 'Vientiane', 'Hanoi', 'Phnom Penh', 'Kuala Lumpur', 'Singapore', 'Bandar Seri Begawan', 'Jakarta', 'Manila', 'Dili'] },
+    { name: 'Languages', title: 'Language bank', hint: 'Match the main official language of each country.',
+      items: ['Burmese', 'Thai', 'Lao', 'Vietnamese', 'Khmer', 'Bahasa Malaysia', 'English', 'Malay (Bahasa Melayu)', 'Bahasa Indonesia', 'Filipino', 'Tetum'] },
+    { name: 'Flags', title: 'Flag bank', hint: 'Match each flag to its country.', flag: true, items: NAMES },
+    { name: 'Currency', title: 'Currency bank', hint: 'Match the currency of each country.',
+      items: ['Kyat', 'Baht', 'Kip', 'Dong', 'Riel', 'Ringgit', 'Singapore Dollar', 'Brunei Dollar', 'Rupiah', 'Philippine Peso', 'US Dollar'] }
+  ];
+
   // Map frame: longitude 88E to 142E, latitude 29N to 11S, 14 px per degree.
   var GEO = { lon0: 88, lon1: 142, lat0: 29, lat1: -11, s: 14 };
   GEO.w = (GEO.lon1 - GEO.lon0) * GEO.s;   // 756
@@ -260,6 +276,9 @@
     status: {},
     locked: {},
     selected: null,
+    level: 1,
+    best: {},
+    labels: null,
     dragName: null,
     checks: 0,
     startedAt: 0,
@@ -271,6 +290,7 @@
   };
 
   var zoneEl = {};
+  var zLabelEl = {};
   var bankEl = {};
   var modalHandlers = { ok: null, cancel: null };
 
@@ -310,6 +330,67 @@
   function elapsedSeconds() {
     if (!state.startedAt) return 0;
     return Math.max(0, Math.round((Date.now() - state.startedAt) / 1000));
+  }
+
+  function curLv() { return LV[state.level - 1]; }
+  function disp(name) { return curLv().flag ? 'That flag' : name; }
+  function flagImg(name, alt) {
+    return '<img class="flagimg" src="https://flagcdn.com/w80/' + FLAGCODE[name] + '.png" alt="' + alt + '" draggable="false">';
+  }
+  // Country a circle stands for, once the student has placed it correctly
+  function countryOf(zoneId) {
+    if (state.level === 1 || state.level === 4) return state.zoneContent[zoneId];
+    return state.labels ? state.labels[zoneId] : undefined;
+  }
+  function overall() { var t = 0; for (var k in state.best) { if (state.best.hasOwnProperty(k)) t += state.best[k]; } return t; }
+  function unlocked(n) { return n === 1 || state.best[n - 1] !== undefined; }
+
+  function renderLevelBar() {
+    var bar = $('levelBar');
+    bar.innerHTML = '';
+    LV.forEach(function (lv, i) {
+      var n = i + 1, b = document.createElement('button'), ok = unlocked(n);
+      b.type = 'button';
+      b.className = 'lvbtn' + (n === state.level ? ' current' : '') + (state.best[n] !== undefined ? ' done' : '') + (ok ? '' : ' locked');
+      b.disabled = !ok;
+      b.textContent = (ok ? '' : '🔒 ') + 'L' + n + ' ' + lv.name + (state.best[n] !== undefined ? '  ' + state.best[n] + '/' + TOTAL : '');
+      b.addEventListener('click', function () { gotoLevel(n); });
+      bar.appendChild(b);
+    });
+    var t = document.createElement('span');
+    t.className = 'lvtotal';
+    t.textContent = 'Total ' + overall() + ' / ' + (LV.length * TOTAL);
+    bar.appendChild(t);
+  }
+
+  function applyLevelUI() {
+    $('bankTitle').textContent = curLv().title;
+    $('bankHint').textContent = curLv().hint;
+    ZONES.forEach(function (z) {
+      var l = zLabelEl[z.id];
+      l.textContent = state.labels ? state.labels[z.id] : '';
+      l.hidden = !(state.level > 1 && state.labels);
+    });
+    renderLevelBar();
+  }
+
+  function gotoLevel(n) {
+    if (!unlocked(n) || (n === state.level && !state.submitted)) return;
+    var go = function () {
+      state.level = n;
+      $('resultOverlay').hidden = true;
+      buildBank();
+      resetBoard();
+      startTimer();
+      applyLevelUI();
+      setFeedback('Level ' + n + ': ' + LV[n - 1].name + '. ' + LV[n - 1].hint);
+    };
+    if (!state.submitted && placedCount() > 0) {
+      showModal({ title: 'Change level?', body: 'The answers on this screen are not submitted and will be cleared.',
+                  okText: 'Change level', cancelText: 'Stay here', onOk: go });
+    } else {
+      go();
+    }
   }
 
   function placedCount() { return Object.keys(state.zoneContent).length; }
@@ -484,12 +565,19 @@
           var name = '';
           try { name = e.dataTransfer.getData('text/plain'); } catch (err) { name = ''; }
           if (!name) name = state.dragName || '';
-          if (NAMES.indexOf(name) !== -1) tryPlace(name, z.id);
+          if (curLv().items.indexOf(name) !== -1) tryPlace(name, z.id);
           state.dragName = null;
         });
         b.addEventListener('click', function () { onZoneClick(z.id); });
         stage.appendChild(b);
         zoneEl[z.id] = b;
+        var lb = document.createElement('span');
+        lb.className = 'zlabel';
+        lb.hidden = true;
+        lb.style.left = b.style.left;
+        lb.style.top = b.style.top;
+        stage.appendChild(lb);
+        zLabelEl[z.id] = lb;
       })(ZONES[i], i + 1);
     }
   }
@@ -498,12 +586,12 @@
     var bank = $('bank');
     bank.innerHTML = '';
     bankEl = {};
-    shuffle(NAMES).forEach(function (name) {
+    shuffle(curLv().items).forEach(function (name) {
       var el = document.createElement('button');
       el.type = 'button';
       el.className = 'country';
       el.draggable = true;
-      el.textContent = name;
+      if (curLv().flag) { el.innerHTML = flagImg(name, 'Flag'); } else { el.textContent = name; }
       el.dataset.country = name;
       el.addEventListener('dragstart', function (e) {
         if (el.classList.contains('used') || state.submitted) { e.preventDefault(); return; }
@@ -558,7 +646,7 @@
     state.selected = name;
     bankEl[name].classList.add('selected');
     armZones(true);
-    if (!fromDrag) setFeedback('Selected ' + name + '. Now tap its circle on the map.');
+    if (!fromDrag) setFeedback('Selected: ' + disp(name) + '. Now tap its circle on the map.');
   }
 
   function renderZone(id) {
@@ -569,16 +657,16 @@
     if (state.status[id]) cls += ' ' + state.status[id];
     if (state.selected && !name) cls += ' armed';
     el.className = cls;
-    el.textContent = name || '?';
+    if (name && curLv().flag) { el.innerHTML = flagImg(name, ''); } else { el.textContent = name || '?'; }
     if (name) {
-      el.setAttribute('aria-label', name + (state.status[id] === 'correct' ? ', correct' : state.status[id] === 'wrong' ? ', wrong' : ''));
+      el.setAttribute('aria-label', disp(name) + (state.status[id] === 'correct' ? ', correct' : state.status[id] === 'wrong' ? ', wrong' : ''));
     } else {
       el.setAttribute('aria-label', 'Empty map circle');
     }
   }
 
   function refreshBank() {
-    NAMES.forEach(function (name) {
+    curLv().items.forEach(function (name) {
       var used = !!nameIsPlaced(name);
       bankEl[name].classList.toggle('used', used);
       bankEl[name].draggable = !used && !state.submitted;
@@ -632,7 +720,7 @@
     updateCounts();
     var left = TOTAL - placedCount();
     setFeedback(left === 0 ? 'All names placed. Press Check answers, then Submit when you are happy.' :
-                             name + ' placed. ' + left + ' to go.');
+                             disp(name) + ' placed. ' + left + ' to go.');
   }
 
   function removeFrom(zoneId) {
@@ -643,7 +731,7 @@
     renderZone(zoneId);
     refreshBank();
     updateCounts();
-    setFeedback(name + ' is back in the name bank.');
+    setFeedback(disp(name) + ' is back in the bank.');
   }
 
   function onZoneClick(zoneId) {
@@ -654,7 +742,7 @@
       return;
     }
     if (name && (state.status[zoneId] === 'correct' || state.revealed)) {
-      showProfile(name);
+      showProfile(countryOf(zoneId));
       return;
     }
     if (name && !state.submitted) {
@@ -718,7 +806,10 @@
       setFeedback('Place at least one country name first.', 'bad');
       return;
     }
-    callServer('checkPlacements', [placements], function (res) {
+    var fresh = ZONES.filter(function (z) { return state.zoneContent[z.id] && !state.locked[z.id]; })
+                     .map(function (z) { return z.id; });
+    var who = state.student ? { id: state.student.id, name: state.student.name, section: state.student.section } : null;
+    callServer('checkPlacements', [placements, who, state.startedAt, fresh, state.level], function (res) {
       if (!res || !res.ok) {
         showModal({ title: 'Could not check', body: (res && res.message) || 'Something went wrong. Please try again.', cancelText: null });
         return;
@@ -728,7 +819,7 @@
       ZONES.forEach(function (z) {
         if (Object.prototype.hasOwnProperty.call(res.results, z.id)) {
           if (res.results[z.id]) {
-            if (!state.locked[z.id]) firstNew = firstNew || state.zoneContent[z.id];
+            if (!state.locked[z.id]) firstNew = firstNew || countryOf(z.id);
             state.status[z.id] = 'correct';
             state.locked[z.id] = true;
           } else {
@@ -775,7 +866,9 @@
       section: s.section,
       placements: getPlacements(),
       checks: state.checks,
-      seconds: elapsedSeconds()
+      seconds: elapsedSeconds(),
+      attemptId: state.startedAt,
+      level: state.level
     };
     payload.seconds = Math.max(0, payload.seconds);
 
@@ -790,6 +883,8 @@
       }
       state.submitted = true;
       state.result = res;
+      state.best = res.best || state.best;
+      if (res.labels) state.labels = res.labels;
       state.submittedPlacements = payload.placements;
       state.finalSeconds = payload.seconds;
       stopTimer();
@@ -805,6 +900,7 @@
       });
       refreshBank();
       updateCounts();
+      applyLevelUI();
       setFeedback('Submitted! Your score: ' + res.score + ' / ' + res.total + '.', 'good');
       showResult();
     }, 'Saving your answers...');
@@ -821,7 +917,7 @@
     var headline, message;
     if (res.score === res.total) {
       headline = 'Perfect score!';
-      message = 'You placed every Southeast Asian nation correctly.';
+      message = 'Every answer on this level is correct.';
     } else if (res.score >= 9) {
       headline = 'Excellent work!';
       message = 'You know the map of Southeast Asia very well. Only a few places to review.';
@@ -836,7 +932,8 @@
     $('resMessage').textContent = message;
 
     var stats = [
-      res.percent + '%',
+      'Level ' + state.level + ': ' + res.score + '/' + res.total,
+      'Total ' + overall() + ' / ' + (LV.length * TOTAL),
       'Time ' + fmtTime(state.finalSeconds || 0),
       'Checks used: ' + state.checks,
       'Saved ✓'
@@ -846,7 +943,9 @@
     var wrongHtml = '';
     ZONES.forEach(function (z) {
       if (!res.results[z.id]) {
-        wrongHtml += '<li>In the circle for <b>' + esc(res.key[z.id]) + '</b> you placed <b>' + esc((state.submittedPlacements || {})[z.id] || '(nothing)') + '</b>.</li>';
+        var who = state.level === 1 ? res.key[z.id] : ((state.labels && state.labels[z.id]) || '');
+        wrongHtml += '<li>In the circle for <b>' + esc(who) + '</b> you placed <b>' + esc((state.submittedPlacements || {})[z.id] || '(nothing)') + '</b>' +
+                     (state.level === 1 ? '.' : '. Correct: <b>' + esc(res.key[z.id]) + '</b>.') + '</li>';
       }
     });
     var mist = $('resMistakes');
@@ -867,6 +966,7 @@
              '<div class="as">Ruled by: ' + esc(f.ruled) + '  ·  ASEAN: ' + esc(f.asean) + '</div></li>';
     }).join('');
 
+    $('resLevelNext').hidden = state.level >= LV.length;
     $('resultOverlay').hidden = false;
     $('resultOverlay').scrollTop = 0;
   }
@@ -945,12 +1045,16 @@
         });
         return;
       }
-      beginActivity({ id: res.studentId, name: name, section: section });
+      beginActivity({ id: res.studentId, name: name, section: section, best: res.best, labels: res.labels });
     }, 'Checking your details...');
   }
 
   function beginActivity(student) {
     state.student = student;
+    state.best = student.best || {};
+    state.labels = student.labels || null;
+    state.level = 1;
+    for (var n = 1; n <= LV.length; n++) { if (state.best[n] === undefined) { state.level = n; break; } }
     var first = (Array.from ? Array.from(student.name)[0] : student.name.charAt(0)) || '?';
     $('avatar').textContent = first.toUpperCase();
     $('chipName').textContent = student.name;
@@ -958,6 +1062,7 @@
 
     buildBank();
     resetBoard();
+    applyLevelUI();
     $('loginScreen').hidden = true;
     $('appScreen').hidden = false;
     window.scrollTo(0, 0);
@@ -999,6 +1104,10 @@
   function doSwitchUser() {
     stopTimer();
     state.student = null;
+    state.level = 1;
+    state.best = {};
+    state.labels = null;
+    buildBank();
     $('resultOverlay').hidden = true;
     $('appScreen').hidden = true;
     $('loginScreen').hidden = false;
@@ -1007,6 +1116,7 @@
     $('section').value = '';
     setLoginError('');
     resetBoard();
+    applyLevelUI();
     window.scrollTo(0, 0);
     $('studentId').focus();
   }
@@ -1068,6 +1178,7 @@
     $('resReveal').addEventListener('click', revealAnswers);
     $('resClose').addEventListener('click', function () { $('resultOverlay').hidden = true; });
     $('resNext').addEventListener('click', doSwitchUser);
+    $('resLevelNext').addEventListener('click', function () { gotoLevel(state.level + 1); });
 
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') {
@@ -1089,6 +1200,7 @@
     });
 
     ZONES.forEach(function (z) { renderZone(z.id); });
+    applyLevelUI();
     updateCounts();
     loadInitData();
   }

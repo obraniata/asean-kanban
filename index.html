@@ -87,6 +87,8 @@
       </div>
     </div>
 
+    <div class="levelbar" id="levelBar"></div>
+
     <div class="toolbar">
       <button class="btn btn-primary" id="checkBtn" type="button">Check answers</button>
       <button class="btn btn-good" id="submitBtn" type="button" disabled>Submit final answers</button>
@@ -111,8 +113,8 @@
       </section>
 
       <aside class="panel bank-panel">
-        <h2>Country name bank</h2>
-        <p class="hint">Drag a name to a circle, or tap a name and then tap a circle.</p>
+        <h2 id="bankTitle">Country name bank</h2>
+        <p class="hint" id="bankHint">Drag a name to a circle, or tap a name and then tap a circle.</p>
         <div class="bank" id="bank"></div>
 
         <div class="profile" id="profileBox" aria-live="polite">
@@ -154,6 +156,7 @@
     <div class="result-actions">
       <button class="btn btn-gold" id="resReveal" type="button">Show correct answers on the map</button>
       <button class="btn btn-ghost" id="resClose" type="button">Back to the map</button>
+      <button class="btn btn-good" id="resLevelNext" type="button">Next level ▶</button>
       <button class="btn btn-primary" id="resNext" type="button">Next student</button>
     </div>
   </div>
